@@ -1,0 +1,104 @@
+[theme]
+theme = "solarized-dark"
+[theme.overrides]
+idle_bg = "#123456"
+idle_fg = "#abcdef"
+
+[icons]
+icons = "emoji"
+[icons.overrides]
+bat = ["|E|", "|_|", "|=|", "|F|"]
+bat_charging = "|^| "
+
+[[block]]
+block = "net"
+device="tun0"
+format=" ❗❗❗ VPN CONNECTED ❗❗❗"
+missing_format=""
+
+[[block]]
+block="net"
+
+[[block]]
+block = "docker"
+interval = 2
+format = "$icon $running/$total "
+
+[[block]]
+block = "cpu"
+
+[[block]]
+block = "temperature"
+format = "$icon $max max "
+format_alt = "$icon $min min, $max max, $average avg "
+interval = 2
+
+[[block]]
+block = "load"
+format = "$icon avg: $1m.eng(w:4) "
+interval = 1
+
+[[block]]
+block = "nvidia_gpu"
+interval = 1
+format = "$icon $utilization $temperature $clocks "
+
+[[block]]
+block = "disk_space"
+path = "/"
+info_type = "available"
+alert_unit = "GB"
+interval = 20
+warning = 20.0
+alert = 10.0
+format = "$icon root: $available.eng(w:2) "
+
+[[block]]
+block = "disk_space"
+path = "/home/"
+info_type = "available"
+alert_unit = "GB"
+interval = 20
+warning = 20.0
+alert = 10.0
+format = "$icon home: $available.eng(w:4) "
+
+[[block]]
+block = "memory"
+format = "$icon $mem_used.eng(w:3,u:B,p:Mi)/$mem_avail.eng(w:3,u:B,p:Mi)"
+
+[[block]]
+block = "sound"
+[[block.click]]
+button = "left"
+cmd = "pavucontrol"
+
+[[block]]
+block = "notify"
+format = "$icon {$paused{Off}|On} "
+
+[[block]]
+block = "time"
+interval = 5
+format = "$timestamp.datetime(f:'%a %d/%m %R') "
+
+[[block]]
+block = "menu"
+text = " \u23fb "
+[[block.items]]
+display = " -&gt;   Cancel   &lt;- "
+cmd = "true"
+[[block.items]]
+display = " -&gt;   Lock   &lt;- "
+cmd = "i3lock -c 000000"
+[[block.items]]
+display = " -&gt;   Logout   &lt;- "
+cmd = "i3-msg exit"
+[[block.items]]
+display = " -&gt;   Power Off   &lt;- "
+cmd = "poweroff"
+confirm_msg = "Are you sure you want to power off?"
+[[block.items]]
+display = " -&gt;  Reboot   &lt;- "
+cmd = "reboot"
+confirm_msg = "Are you sure you want to reboot?"
