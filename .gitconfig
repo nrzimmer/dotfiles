@@ -1,0 +1,26 @@
+[user]
+	email = nrzimmer@gmail.com
+	name = Natanael Rodrigo Zimmer
+[core]
+        eol = lf
+	autocrlf = input
+        safecrlf = false
+	pager = less -iXFR
+[alias]
+        dirdiff = difftool --dir-diff
+        optimize = !git fetch --all -p && git gc --aggressive --prune=now
+        fup = commit --amend --no-edit
+        co = checkout
+        chp = cherry-pick
+	fupme = commit --amend --no-edit --reset-author
+	cnb = "!f() { \
+	GH_RESPONSE=$(gh api /repos/tabiahealth/careos/issues/$1 --template '{{.title}}') && git co -b $1-$(echo $GH_RESPONSE | iconv -f utf8 -t ascii//TRANSLIT//IGNORE | tr -dc '[:alnum:] ' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -s '-'); \
+	}; f"
+[fetch]
+	prune = true
+[init]
+	defaultBranch = main
+[push]
+	autoSetupRemote = 1
+[credential]
+	helper = store
