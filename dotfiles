@@ -1,0 +1,305 @@
+#!/usr/bin/env bash
+
+# dotfiles: unified interface for managing dotfiles in this repo.
+# Usage:
+#   dotfiles add FILE [FILE...]
+#   dotfiles remove FILE [FILE...]
+#   dotfiles disable FILE [FILE...]
+#   dotfiles setup
+#   dotfiles help
+
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  echo "Usage:" >&2
+  echo "  $(basename "$0") add FILE [FILE...]" >&2
+  echo "  $(basename "$0") remove FILE [FILE...]" >&2
+  echo "  $(basename "$0") disable FILE [FILE...]" >&2
+  echo "  $(basename "$0") setup" >&2
+  echo "  $(basename "$0") help" >&2
+}
+
+# ---------- helpers ----------
+abs_path() {
+  local p="${1-}"
+  [[ -z "$p" ]] && return 1
+  # Expand ~ and make absolute
+  [[ "$p" == ~* ]] && p="${p/#\~/$HOME}"
+  [[ "$p" != /* ]] && p="$PWD/$p"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -m "$p" 2>/dev/null || echo "$p"
+  elif command -v readlink >/dev/null 2>&1; then
+    readlink -f "$p" 2>/dev/null || echo "$p"
+  else
+    echo "$p"
+  fi
+}
+
+# Like abs_path, but does NOT resolve symlinks (no-follow). Useful when we need to
+# operate on the symlink path itself.
+abs_path_nofollow() {
+  local p="${1-}"
+  [[ -z "$p" ]] && return 1
+  # Expand ~ and make absolute, but don't canonicalize through symlinks
+  [[ "$p" == ~* ]] && p="${p/#\~/$HOME}"
+  [[ "$p" != /* ]] && p="$PWD/$p"
+  echo "$p"
+}
+
+link_target() {
+  # Resolve the final target of a (possibly symlink) path; prints empty on failure
+  local p="${1-}"
+  [[ -z "$p" ]] && return 1
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -m "$p" 2>/dev/null || true
+  else
+    readlink -f "$p" 2>/dev/null || true
+  fi
+}
+
+# ---------- add: move file from $HOME into repo and symlink back ----------
+
+add_file() {
+  local input="$1"
+  if [[ -z "$input" ]]; then
+    echo "Usage: add_file <path-to-file>" >&2
+    return 2
+  fi
+  local abs
+  abs=$(abs_path "$input")
+  if [[ ! -f "$abs" ]]; then
+    echo "Error: File not found or not a regular file: $input" >&2
+    return 1
+  fi
+  if [[ "$abs" != "$HOME"/* ]]; then
+    echo "Error: File must be inside your home directory ($HOME): $input" >&2
+    return 3
+  fi
+  local rel="${abs#"$HOME/"}"
+  if [[ -z "$rel" || "$rel" == "$abs" ]]; then
+    echo "Error: Path resolves to HOME, not a file: $input" >&2
+    return 1
+  fi
+  local dest="$repo_dir/$rel"
+  local dest_dir
+  dest_dir="$(dirname "$dest")"
+  mkdir -p "$dest_dir" || { echo "Error: Failed to create directory: $dest_dir" >&2; return 4; }
+  if [[ -e "$dest" ]]; then
+    echo "Error: Destination already exists: $dest" >&2
+    return 5
+  fi
+  mv "$abs" "$dest" || { echo "Error: Failed to move file to: $dest" >&2; return 4; }
+  if ln -s "$dest" "$abs"; then
+    echo "Moved and linked: $abs -> $dest"
+  else
+    mv "$dest" "$abs" 2>/dev/null
+    echo "Error: Failed to create symlink at origin: $abs" >&2
+    return 4
+  fi
+}
+
+# ---------- remove: restore file from repo back to $HOME ----------
+
+remove_file() {
+  local input="${1-}"
+  if [[ -z "$input" ]]; then
+    echo "Usage: remove_file <path-to-symlink>" >&2
+    return 2
+  fi
+  local abs
+  abs=$(abs_path_nofollow "$input")
+  if [[ ! -L "$abs" ]]; then
+    echo "Error: Not a symlink: $input" >&2
+    return 1
+  fi
+  local target
+  target=$(link_target "$abs")
+  if [[ -z "${target}" || ! -e "${target}" ]]; then
+    echo "Error: Symlink target does not exist or could not be resolved: $abs" >&2
+    return 3
+  fi
+  if [[ ! -f "$target" ]]; then
+    echo "Error: Symlink target is not a regular file: $target" >&2
+    return 3
+  fi
+  case "$target" in
+    "$repo_dir"/*) ;;
+    *)
+      echo "Error: Symlink target is not inside this repository: $target" >&2
+      return 4
+      ;;
+  esac
+  rm "$abs" || { echo "Error: Failed to remove symlink: $abs" >&2; return 6; }
+  if mv "$target" "$abs"; then
+    local parent_dir
+    parent_dir="$(dirname "$target")"
+    while [[ "$parent_dir" == "$repo_dir"/* && "$parent_dir" != "$repo_dir" ]]; do
+      rmdir "$parent_dir" 2>/dev/null || break
+      parent_dir="$(dirname "$parent_dir")"
+    done
+    echo "Restored: $abs"
+  else
+    ln -s "$target" "$abs" 2>/dev/null || true
+    echo "Error: Failed to move file back to: $abs" >&2
+    return 6
+  fi
+}
+
+# ---------- disable: remove symlink and copy file back from repo ----------
+
+disable_file() {
+  local input="${1-}"
+  if [[ -z "$input" ]]; then
+    echo "Usage: disable_file <path-to-symlink>" >&2
+    return 2
+  fi
+  local abs
+  abs=$(abs_path_nofollow "$input")
+  if [[ ! -L "$abs" ]]; then
+    echo "Error: Not a symlink: $input" >&2
+    return 1
+  fi
+  local target
+  target=$(link_target "$abs")
+  if [[ -z "${target}" || ! -e "${target}" ]]; then
+    echo "Error: Symlink target does not exist or could not be resolved: $abs" >&2
+    return 3
+  fi
+  if [[ ! -f "$target" ]]; then
+    echo "Error: Symlink target is not a regular file: $target" >&2
+    return 3
+  fi
+  case "$target" in
+    "$repo_dir"/*) ;;
+    *)
+      echo "Error: Symlink target is not inside this repository: $target" >&2
+      return 4
+      ;;
+  esac
+  # Remove the symlink and copy file back from the repo, keeping repo intact
+  rm "$abs" || { echo "Error: Failed to remove symlink: $abs" >&2; return 6; }
+  if cp -f "$target" "$abs"; then
+    echo "Disabled: $abs (copied from repo)"
+  else
+    # Try to restore the symlink on failure
+    ln -s "$target" "$abs" 2>/dev/null || true
+    echo "Error: Failed to copy file back to: $abs" >&2
+    return 6
+  fi
+}
+
+# ---------- setup: link all repo files into $HOME ----------
+is_root_script() {
+  local path="$1"
+  case "$path" in
+    "$repo_dir/dotfiles"|"$repo_dir/.gitignore") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+backup_path() {
+  local original="$1.original"
+  if [[ ! -e "$original" && ! -L "$original" ]]; then
+    echo "$original"
+    return 0
+  fi
+  local i=1
+  while [[ -e "$original.$i" || -L "$original.$i" ]]; do
+    i=$((i+1))
+  done
+  echo "$original.$i"
+}
+
+run_setup() {
+  while IFS= read -r -d '' file; do
+    if is_root_script "$file"; then
+      continue
+    fi
+    rel="${file#"$repo_dir/"}"
+    dest="$HOME/$rel"
+    mkdir -p "$(dirname "$dest")"
+    if [[ -L "$dest" ]]; then
+      target=$(link_target "$dest")
+      if [[ "$target" == "$file" ]]; then
+        echo "Already linked: $dest"
+        continue
+      fi
+    fi
+    if [[ -e "$dest" || -L "$dest" ]]; then
+      bkp="$(backup_path "$dest")"
+      mv "$dest" "$bkp"
+      echo "Backed up: $dest -> $bkp"
+    fi
+    ln -s "$file" "$dest"
+    echo "Linked: $dest -> $file"
+  done < <(find "$repo_dir" \
+    \( -name .git -o -name .idea \) -prune -o -type f -print0)
+}
+
+cmd="${1-}" || true
+shift || true
+
+case "$cmd" in
+  add)
+    if [[ $# -lt 1 ]]; then
+      echo "Error: 'add' requires at least one file." >&2
+      usage
+      exit 2
+    fi
+    status=0
+    for arg in "$@"; do
+      if ! add_file "$arg"; then
+        status=1
+      fi
+    done
+    exit $status
+    ;;
+  remove|rm)
+    if [[ $# -lt 1 ]]; then
+      echo "Error: 'remove' requires at least one file." >&2
+      usage
+      exit 2
+    fi
+    status=0
+    for arg in "$@"; do
+      if ! remove_file "$arg"; then
+        status=1
+      fi
+    done
+    exit $status
+    ;;
+  setup|install)
+    if [[ $# -ne 0 ]]; then
+      echo "Warning: 'setup' ignores extra arguments." >&2
+    fi
+    run_setup
+    ;;
+  disable)
+    if [[ $# -lt 1 ]]; then
+      echo "Error: 'disable' requires at least one file." >&2
+      usage
+      exit 2
+    fi
+    status=0
+    for arg in "$@"; do
+      if ! disable_file "$arg"; then
+        status=1
+      fi
+    done
+    exit $status
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  "")
+    usage
+    exit 2
+    ;;
+  *)
+    echo "Error: Unknown command: $cmd" >&2
+    usage
+    exit 2
+    ;;
+esac
