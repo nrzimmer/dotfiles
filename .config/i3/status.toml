@@ -11,6 +11,18 @@ bat = ["|E|", "|_|", "|=|", "|F|"]
 bat_charging = "|^| "
 
 [[block]]
+block = "custom"
+command = "/home/zimmer/.config/i3/claude_usage.sh"
+interval = 120
+json = true
+signal = 1
+if_command = "false"
+
+[[block.click]]
+button = "left"
+cmd = "pkill -SIGRTMIN+1 i3status-rs"
+
+[[block]]
 block = "net"
 device="tun0"
 format=" ❗❗❗ VPN CONNECTED ❗❗❗"

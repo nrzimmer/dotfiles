@@ -1,1 +1,11 @@
 alias reload='source ~/.zshrc'
+alias ls='lsd'
+
+# Roda um comando em background, sem log no console, desvinculado do shell.
+# Uso: detach comando arg1 arg2 ...
+detach() {
+  "$@" &> /dev/null &!
+}
+# Faz o autocomplete tratar o 1o argumento de `detach` como um comando
+# (mesmo completer usado por nohup/sudo). Requer compinit já carregado.
+compdef _precommand detach

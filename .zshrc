@@ -35,11 +35,11 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 
 # Uncomment one of the following lines to change the auto-update behavior
 # zstyle ':omz:update' mode disabled  # disable automatic updates
-# zstyle ':omz:update' mode auto      # update automatically without asking
+zstyle ':omz:update' mode auto      # update automatically without asking
 # zstyle ':omz:update' mode reminder  # just remind me to update when it's time
 
 # Uncomment the following line to change how often to auto-update (in days).
-# zstyle ':omz:update' frequency 13
+zstyle ':omz:update' frequency 1
 
 # Uncomment the following line if pasting URLs and other text is messed up.
 # DISABLE_MAGIC_FUNCTIONS="true"
@@ -80,7 +80,12 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(gitfast composer docker dotenv sudo)
+if [[ "$MARKER_JUNIE_TERMINAL" == "true" ]]; then
+  plugins=()
+else
+  plugins=(gitfast composer docker sudo)
+fi
+
 
 source $ZSH/oh-my-zsh.sh
 
@@ -113,7 +118,14 @@ source $ZSH/oh-my-zsh.sh
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-source ~/.aliases
+if [[ "$MARKER_JUNIE_TERMINAL" == "true" ]]; then
+else
+  source ~/.aliases
+fi
+
+#alias claude='echo "Use claude-work or claude-personal."'
+alias claude-work='CLAUDE_CONFIG_DIR=~/.claude-tabia /usr/bin/claude'
+alias claude-personal='CLAUDE_CONFIG_DIR=~/.claude-personal /usr/bin/claude'
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
@@ -122,10 +134,26 @@ export NVM_DIR="$HOME/.nvm"
 bindkey '^H' backward-kill-word
 
 export PATH="/home/zimmer/.mozbuild/git-cinnabar:$PATH"
-eval "$(zoxide init zsh --cmd cd)"
 
 zstyle ':completion:*' rehash true
 setopt histignorespace
+setopt HIST_IGNORE_SPACE
 
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
 export PATH="$HOME/dotfiles:$PATH"
+
+[ -f "/home/zimmer/.ghcup/env" ] && . "/home/zimmer/.ghcup/env" # ghcup-env
+
+eval "$(/usr/bin/envwalk hook zsh)"
+
+export JAVA_HOME=/usr/lib/jvm/default
+
+# Created by `pipx` on 2026-04-07 21:37:42
+export PATH="$PATH:/home/zimmer/.local/bin"
+
+if [[ "$MARKER_JUNIE_TERMINAL" == "true" || "$CLAUDECODE" == "1" ]]; then
+else
+  eval "$(zoxide init zsh --cmd cd)"
+fi
+
+export SUDO_ASKPASS=/usr/lib/sudo/askpass
