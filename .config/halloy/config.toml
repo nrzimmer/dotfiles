@@ -1,0 +1,45 @@
+# Halloy config.
+#
+# For a complete list of available options,
+# please visit https://halloy.chat/configuration.html
+theme = "flexor-dark"
+
+[servers.QuakeNetZnc]
+nickname = "zimmer"
+server = "znc.nrzimmer.com"
+port = 6697
+use_tls = true
+username = "zimmer/QuakeNet"
+password_file = "password"
+realname = "zimmer"
+channels = ["#WarPigs"]
+
+[buffer.timestamp]
+format = "%d/%m/%Y %H:%M:%S"
+context_menu_format = "%d/%m/%Y %H:%M:%S"
+copy_format = "%d/%m/%Y %H:%M:%S"
+
+[actions.sidebar]
+buffer = "replace-pane"
+
+[buffer.channel.topic_banner]
+enabled = true
+
+[buffer.nickname]
+show_access_levels = "all"
+
+
+[buffer.text_input.nickname]
+show_access_level = "all"
+
+[buffer.text_input]
+max_lines = 30
+send_line_delay = 750
+
+[external_editor]
+command = "code"
+args = ["-w"]
+
+[font]
+family = "MesloLGS NF"
+size = 13

@@ -194,7 +194,7 @@ disable_file() {
 is_root_script() {
   local path="$1"
   case "$path" in
-    "$repo_dir/dotfiles"|"$repo_dir/.gitignore") return 0 ;;
+    "$repo_dir/dotfiles"|"$repo_dir/bootstrap-zsh"|"$repo_dir/.gitignore") return 0 ;;
     *) return 1 ;;
   esac
 }

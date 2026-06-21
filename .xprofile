@@ -1,0 +1,2 @@
+export XDG_SESSION_TYPE=x11
+unset WAYLAND_DISPLAY
