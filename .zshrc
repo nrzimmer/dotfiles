@@ -148,8 +148,7 @@ eval "$(/usr/bin/envwalk hook zsh)"
 
 export JAVA_HOME=/usr/lib/jvm/default
 
-# Created by `pipx` on 2026-04-07 21:37:42
-export PATH="$PATH:/home/zimmer/.local/bin"
+# (pipx PATH moved to .zshenv)
 
 if [[ "$MARKER_JUNIE_TERMINAL" == "true" || "$CLAUDECODE" == "1" ]]; then
 else
