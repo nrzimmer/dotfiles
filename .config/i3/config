@@ -6,14 +6,46 @@
 #
 
 exec --no-startup-id systemctl --user import-environment DISPLAY XAUTHORITY
-exec --no-startup-id dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_SESSION_TYPE=x11
+exec --no-startup-id dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=i3
 
-exec xsetroot -solid "#333333"
+# Start xdg-desktop-portal directly. i3 never activates graphical-session.target
+# (RefuseManualStart=yes), so the portal's systemd unit refuses to start, and
+# sandboxed flatpaks (e.g. Slack) get no OpenURI handler -- their "Sign In"
+# button silently does nothing. Launching the frontend here gives them a working
+# portal; the gtk backend (selected in ~/.config/xdg-desktop-portal/portals.conf)
+# is D-Bus-activated on demand.
+exec --no-startup-id /usr/libexec/xdg-desktop-portal -r
+
+# Start the gnome-keyring secrets component and forward its address to the
+# systemd/D-Bus activation environment so D-Bus-activated apps (e.g. Slack) use
+# this daemon instead of spawning a fresh, locked one. GDM launches i3 directly
+# and does not run ~/.xinitrc, so this must happen here. The ssh component is
+# intentionally excluded to avoid overriding the custom SSH_AUTH_SOCK agent.
+exec --no-startup-id sh -c 'eval $(/usr/bin/gnome-keyring-daemon --start --components=secrets,pkcs11); dbus-update-activation-environment --systemd GNOME_KEYRING_CONTROL'
+
+# Per-monitor wallpaper (edit image paths in the script). Falls back to solid gray.
+exec_always --no-startup-id ~/.config/i3/set-wallpaper.sh
+bindsym $mod+Shift+w exec --no-startup-id ~/.config/i3/set-wallpaper.sh
 exec XDG_MENU_PREFIX=arch- kbuildsycoca6
 exec dunst > /dev/null 2>&1 &
+# Compositor: i3 does no compositing, so video/screen tearing occurs (esp. on
+# NVIDIA). picom with vsync=true fixes it. Fullscreen games bypass it (no added
+# latency). Toggle at runtime with $mod+Shift+p (see keybind below).
+exec --no-startup-id picom --config ~/.config/picom.conf
 #exec xrandr --dpi 96
 # i3 config file (v4)
-exec xrandr --output DP-0 --mode 2560x1080 --rate 75 --primary --right-of HDMI-0 --output HDMI-0 --mode 1920x1080 --rate 75
+exec xrandr --output DP-0 --mode 2560x1080 --rate 75 --dpi 96 --primary --right-of HDMI-0 --output HDMI-0 --mode 1920x1080 --rate 75 --dpi 96
+# Arm G-SYNC Compatible (VRR) on the LG/DP-0 only (DisplayVRRMode=3). FreeSync
+# must be enabled in the LG OSD. The Samsung/HDMI can't do VRR on NVIDIA X11.
+# VRR engages automatically when a fullscreen game runs (idle on desktop).
+# Runs after xrandr so the layout exists. To watch it engage, append
+# `-a ShowVRRVisualIndicator=1` to the command below.
+exec --no-startup-id sh -c 'sleep 2 && nvidia-settings --assign CurrentMetaMode="DPY-1: 2560x1080_75 +1920+0 {ViewPortIn=2560x1080, ViewPortOut=2560x1080+0+0, AllowVRR=On}, DPY-0: 1920x1080_75 +0+0 {ViewPortIn=1920x1080, ViewPortOut=1920x1080+0+0}"'
+# One-time initial workspace placement: ws1 on primary (DP-0), ws2 on
+# secondary (HDMI-0). Only runs when both monitors are connected; with a single
+# monitor it does nothing and ws1 lands there by default. Not a persistent
+# assignment, so workspaces can still be moved between monitors during the session.
+exec --no-startup-id sh -c 'xrandr --query | grep -q "^HDMI-0 connected" && i3-msg "workspace 2; move workspace to output HDMI-0; workspace 1; move workspace to output DP-0"'
 #exec xrandr --output DP-0 --mode 2560x1080 --rate 75 --primary
 #
 # Please see https://i3wm.org/docs/userguide.html for a complete reference!
@@ -42,6 +74,13 @@ exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
 # NetworkManager is the most popular way to manage wireless networks on Linux,
 # and nm-applet is a desktop environment-independent system tray GUI for it.
 exec --no-startup-id nm-applet
+
+# CopyQ clipboard manager: keeps clipboard contents (including images from
+# Spectacle) after the source app closes, since i3 has no clipboard manager.
+exec --no-startup-id copyq
+
+# Tray "router" for other tray protocols
+exec --no-startup-id snixembed
 
 # Use pactl to adjust volume in PulseAudio.
 set $refresh_i3status killall -SIGUSR1 i3status
@@ -175,6 +214,8 @@ bindsym $mod+bracketleft  move to workspace prev
 bindsym $mod+Shift+c reload
 # restart i3 inplace (preserves your layout/session, can be used to upgrade i3)
 bindsym $mod+Shift+r restart
+# Toggle picom compositor (e.g. turn off before a latency-sensitive game)
+bindsym $mod+Shift+p exec --no-startup-id sh -c 'pkill -x picom || picom --config ~/.config/picom.conf &'
 # exit i3 (logs you out of your X session)
 bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'You pressed the exit shortcut. Do you really want to exit i3? This will end your X session.' -B 'Yes, exit i3' 'i3-msg exit'"
 
@@ -250,4 +291,7 @@ for_window [all] title_window_icon on
 exec_always --no-startup-id ~/.local/bin/set-wm-icon --watch
 assign [class="steam"] STEAM
 assign [class="dota2"] DOTA
+assign [class="(?i)zomboid"] ZOMBOID
+# Janela do crawler de vagas (~/src/vagas) abre no workspace nomeado CRAWLER.
+assign [class="(?i)vagas-crawler"] CRAWLER
 
