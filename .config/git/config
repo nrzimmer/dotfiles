@@ -10,7 +10,8 @@
         dirdiff = difftool --dir-diff
         optimize = !git fetch --all -p && git gc --aggressive --prune=now
         fup = commit --amend --no-edit
-        co = checkout
+	co = checkout
+	wt = worktree
         chp = cherry-pick
 	fupme = commit --amend --no-edit --reset-author
 	cnw = "!ff() { \
