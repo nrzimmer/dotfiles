@@ -148,6 +148,11 @@ eval "$(/usr/bin/envwalk hook zsh)"
 
 export JAVA_HOME=/usr/lib/jvm/default
 
+export GOPATH="$HOME/.go"
+export PATH="$GOPATH/bin:$PATH"
+
+export PATH="$HOME/opt/steamcmd:$PATH"
+
 # (pipx PATH moved to .zshenv)
 
 if [[ "$MARKER_JUNIE_TERMINAL" == "true" || "$CLAUDECODE" == "1" ]]; then
@@ -156,3 +161,7 @@ else
 fi
 
 export SUDO_ASKPASS=/usr/lib/sudo/askpass
+
+#THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
+export SDKMAN_DIR="$HOME/.sdkman"
+[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"

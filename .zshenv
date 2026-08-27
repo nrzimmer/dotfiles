@@ -5,3 +5,6 @@ typeset -U path PATH
 
 # pipx / user-local binaries (merged from former .zprofile)
 export PATH="$PATH:$HOME/.local/bin"
+
+# sdkman-managed maven (installed for careos; non-interactive shells don't source .zshrc's sdkman-init.sh)
+export PATH="$PATH:$HOME/.sdkman/candidates/maven/current/bin"
