@@ -245,6 +245,9 @@ bindsym $mod+Shift+Print exec spectacle -r
 bindsym $mod+l exec "i3lock -c 000000"
 
 for_window [all] title_window_icon on
+# Feed _NET_WM_ICON to apps that don't set one (Slack, Halloy) so the
+# title-bar icon above works. Rules: ~/.config/set-wm-icon.conf
+exec_always --no-startup-id ~/.local/bin/set-wm-icon --watch
 assign [class="steam"] STEAM
 assign [class="dota2"] DOTA
 

@@ -1,0 +1,190 @@
+#!/usr/bin/python3
+"""Inject _NET_WM_ICON into X11 windows that don't set one themselves.
+
+i3's `title_window_icon on` only reads the _NET_WM_ICON property; apps like
+Slack (Electron/X11) and Halloy (iced) never set it, so they show no icon in
+the title bar. This tool loads a PNG per WM_CLASS (see ~/.config/set-wm-icon.conf)
+and writes it into the matching windows.
+
+Modes:
+  set-wm-icon --once     apply to all current windows, then exit
+  set-wm-icon --watch    daemon: apply now and to every window that appears
+  set-wm-icon --id 0x... /path/to.png [more.png ...]   one explicit window
+
+The daemon is what you want from i3:
+  exec_always --no-startup-id ~/.local/bin/set-wm-icon --watch
+"""
+
+import os
+import re
+import sys
+import select
+import fcntl
+
+from PIL import Image
+from Xlib import X, display, Xatom
+from Xlib.error import XError
+
+CONF = os.path.expanduser("~/.config/set-wm-icon.conf")
+ICON_SIZES = (48, 32, 16)
+
+d = display.Display()
+root = d.screen().root
+NET_WM_ICON = d.intern_atom("_NET_WM_ICON")
+NET_CLIENT_LIST = d.intern_atom("_NET_CLIENT_LIST")
+
+
+def load_rules(path):
+    rules = []
+    try:
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                pat, _, png = line.partition("=")
+                pat, png = pat.strip(), png.strip()
+                try:
+                    rx = re.compile(pat, re.I)
+                except re.error as e:
+                    print(f"set-wm-icon: bad regex {pat!r}: {e}", file=sys.stderr)
+                    continue
+                rules.append((rx, os.path.expanduser(png)))
+    except FileNotFoundError:
+        print(f"set-wm-icon: no config at {path}", file=sys.stderr)
+    return rules
+
+
+_icon_cache = {}
+
+
+def encode_icon(paths):
+    """Build the _NET_WM_ICON CARDINAL array: [w, h, w*h ARGB pixels, ...]."""
+    key = tuple(paths)
+    if key in _icon_cache:
+        return _icon_cache[key]
+    data = []
+    for p in paths:
+        try:
+            base = Image.open(p).convert("RGBA")
+        except OSError as e:
+            print(f"set-wm-icon: cannot read {p}: {e}", file=sys.stderr)
+            continue
+        for size in ICON_SIZES:
+            im = base.resize((size, size), Image.LANCZOS)
+            data.append(size)
+            data.append(size)
+            raw = im.tobytes()  # RGBA, row-major
+            for i in range(0, len(raw), 4):
+                r, g, b, a = raw[i], raw[i + 1], raw[i + 2], raw[i + 3]
+                data.append((a << 24) | (r << 16) | (g << 8) | b)
+    _icon_cache[key] = data
+    return data
+
+
+def set_icon(win, data):
+    win.change_property(NET_WM_ICON, Xatom.CARDINAL, 32, data,
+                        mode=X.PropModeReplace)
+
+
+def wm_class(win):
+    try:
+        wc = win.get_wm_class()
+    except (XError, UnicodeDecodeError):
+        return None
+    return wc  # (instance, cls) or None
+
+
+def client_list():
+    try:
+        prop = root.get_full_property(NET_CLIENT_LIST, Xatom.WINDOW)
+    except XError:
+        return []
+    return list(prop.value) if prop else []
+
+
+def apply_to(win_id, rules, done):
+    if win_id in done:
+        return
+    win = d.create_resource_object("window", win_id)
+    wc = wm_class(win)
+    if wc is None:
+        return  # WM_CLASS not set yet; leave un-done so we retry later
+    for rx, png in rules:
+        if any(rx.search(s or "") for s in wc):
+            try:
+                set_icon(win, encode_icon([png]))
+                done.add(win_id)
+                print(f"set-wm-icon: {wc[1]} ({win_id:#x}) <- {png}")
+            except XError as e:
+                print(f"set-wm-icon: failed on {win_id:#x}: {e}", file=sys.stderr)
+            return
+    done.add(win_id)  # no rule matches this window; don't keep checking it
+
+
+def run_once(rules):
+    done = set()
+    for wid in client_list():
+        apply_to(wid, rules, done)
+    d.sync()
+
+
+def run_watch(rules):
+    done = set()
+    root.change_attributes(event_mask=X.PropertyChangeMask)
+    for wid in client_list():
+        apply_to(wid, rules, done)
+    d.sync()
+    fd = d.fileno()
+    while True:
+        # timeout lets us retry windows whose WM_CLASS wasn't ready yet
+        select.select([fd], [], [], 2.0)
+        while d.pending_events():
+            ev = d.next_event()
+            if (ev.type == X.PropertyNotify
+                    and ev.atom == NET_CLIENT_LIST):
+                pass  # fall through to rescan
+        for wid in client_list():
+            apply_to(wid, rules, done)
+        # drop windows that have gone away so the set can't grow forever
+        done.intersection_update(set(client_list()))
+        d.sync()
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] == "--id":
+        if len(args) < 3:
+            sys.exit("usage: set-wm-icon --id 0xWINID icon.png [icon2.png ...]")
+        wid = int(args[1], 0)
+        data = encode_icon(args[2:])
+        set_icon(d.create_resource_object("window", wid), data)
+        d.sync()
+        return
+
+    rules = load_rules(CONF)
+    if not rules:
+        sys.exit("set-wm-icon: nothing to do (empty config)")
+
+    mode = args[0] if args else "--watch"
+    if mode == "--once":
+        run_once(rules)
+    elif mode == "--watch":
+        lock = open(os.path.join(
+            os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "set-wm-icon.lock"), "w")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return  # another --watch instance already running
+        run_watch(rules)
+    else:
+        sys.exit(f"set-wm-icon: unknown mode {mode!r}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
