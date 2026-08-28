@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Hide the "Install ... (lpf)" placeholder launchers from app menus / rofi.
+#
+# The lpf-* recipe packages ship .desktop files in /usr/share/applications.
+# We can't edit those (dnf owns them), but a same-named file in
+# ~/.local/share/applications shadows them, so we drop in copies with
+# NoDisplay=true appended. Re-runs are cheap and idempotent.
+
+set -u
+
+SRC_DIR=/usr/share/applications
+DST_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+
+mkdir -p "$DST_DIR"
+
+changed=0
+shopt -s nullglob
+for f in "$SRC_DIR"/lpf-*.desktop; do
+    b=$(basename "$f")
+    dst="$DST_DIR/$b"
+
+    # Skip if our override already exists and is up to date with the source.
+    if [ -f "$dst" ] && [ ! "$f" -nt "$dst" ] && grep -q '^NoDisplay=true$' "$dst"; then
+        continue
+    fi
+
+    cp -- "$f" "$dst"
+    grep -q '^NoDisplay=true$' "$dst" || printf '\nNoDisplay=true\n' >> "$dst"
+    changed=1
+done
+
+# Also drop overrides that no longer have a matching source (package removed).
+for f in "$DST_DIR"/lpf-*.desktop; do
+    [ -e "$f" ] || continue
+    b=$(basename "$f")
+    if [ ! -e "$SRC_DIR/$b" ]; then
+        rm -f -- "$f"
+        changed=1
+    fi
+done
+
+if [ "$changed" -eq 1 ] && command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$DST_DIR" >/dev/null 2>&1
+fi

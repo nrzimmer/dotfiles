@@ -26,6 +26,9 @@ exec --no-startup-id sh -c 'eval $(/usr/bin/gnome-keyring-daemon --start --compo
 # Per-monitor wallpaper (edit image paths in the script). Falls back to solid gray.
 exec_always --no-startup-id ~/.config/i3/set-wallpaper.sh
 bindsym $mod+Shift+w exec --no-startup-id ~/.config/i3/set-wallpaper.sh
+
+# Hide the "Install ... (lpf)" placeholder launchers from menus / rofi.
+exec --no-startup-id hide-lpf &
 exec XDG_MENU_PREFIX=arch- kbuildsycoca6
 exec dunst > /dev/null 2>&1 &
 # Compositor: i3 does no compositing, so video/screen tearing occurs (esp. on
